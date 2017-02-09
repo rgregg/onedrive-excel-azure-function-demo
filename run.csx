@@ -61,17 +61,22 @@ private static async Task ProcessSubscriptionNotificationAsync(string subscripti
 
     state.LastNotificationDateTime = DateTime.UtcNow;
 
-    await RenewAccessTokenAsync(state, log);
+    try {
+        await RenewAccessTokenAsync(state, log);
+    } catch (Exception ex) {
+        log.Info($"Unable to refresh access token: {ex.Message}");
+    }
+
 
     // Make requests to Microsoft Graph to get changes
-    List<DriveItem> changedExcelFileIds = await FindChangedExcelFilesInOneDrive(state, log);
+    List<string> changedExcelFileIds = await FindChangedExcelFilesInOneDrive(state, log);
 
     // Do work on the changed files
     foreach(var file in changedExcelFileIds)
     {
-        log.Verbose($"Processing changes in file: {file.Name}");
+        log.Verbose($"Processing changes in file: {file}");
         try {
-        await ScanExcelFileForPlaceholdersAsync(state, file.Id, log);
+        await ScanExcelFileForPlaceholdersAsync(state, file, log);
         } catch (Exception ex)
         {
             log.Info($"Exception processing file: {ex.Message}");
@@ -164,9 +169,9 @@ private static async Task<string> ReplacePlaceholderValue(string inputValue)
 }
 
 // Request the delta stream from OneDrive to find files that have changed between notifications for this account
-private static async Task<List<DriveItem>> FindChangedExcelFilesInOneDrive(StoredState state, TraceWriter log)
+private static async Task<List<string>> FindChangedExcelFilesInOneDrive(StoredState state, TraceWriter log)
 {
-    List<DriveItem> changedFileIds = new List<DriveItem>();
+    List<string> changedFileIds = new List<string>();
     using (var client = new HttpClient())
     {
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {state.AccessToken}");
@@ -184,14 +189,20 @@ private static async Task<List<DriveItem>> FindChangedExcelFilesInOneDrive(Store
             var deltaResponse = JsonConvert.DeserializeObject<DeltaResponse>(await response.Content.ReadAsStringAsync());
 
             log.Verbose($"Found {deltaResponse.Value.Count()} files changed in this page.");
+            log.Verbose("Changed files" + JsonConvert.SerializeObject(deltaResponse.Value));
+            try {
             var changedExcelFiles = (from f in deltaResponse.Value
-                                    where f.File != null && 
-                                          f.Name.EndsWith(".xlsx") &&
-                                          f.Deleted == null
-                                    select f);
-            
+                                     where f.File != null && 
+                                           f.Name != null && f.Name.EndsWith(".xlsx") &&
+                                           f.Deleted == null
+                                    select f.Id);
             log.Verbose($"Found {changedExcelFiles.Count()} changed Excel files in this page.");
             changedFileIds.AddRange(changedExcelFiles);
+            } catch (Exception ex)
+            {
+                log.Info($"Exception enumerating changed files: {ex.ToString()}");
+                throw;
+            }
 
             if (!string.IsNullOrEmpty(deltaResponse.NextPageUrl))
             {
