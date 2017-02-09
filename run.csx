@@ -61,6 +61,8 @@ private static async Task ProcessSubscriptionNotificationAsync(string subscripti
 
     state.LastNotificationDateTime = DateTime.UtcNow;
 
+    await RenewAccessTokenAsync(state, log);
+
     // Make requests to Microsoft Graph to get changes
     List<DriveItem> changedExcelFileIds = await FindChangedExcelFilesInOneDrive(state, log);
 
@@ -219,6 +221,34 @@ private static HttpResponseMessage PlainTextResponse(string text)
             )
     };
     return response;
+}
+
+// Retrieve a new access token from AAD
+private static async Task RenewAccessTokenAsync(StoredState state, TraceWriter log) 
+{
+    log.Verbose("Refreshing access_token");
+    var tokenServiceUri = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
+    var redirectUri = "https://onedriveapi.azurewebsites.net/o2c.html";
+    var applicationId = "6f9f1420-26e0-498f-a3b9-25643198be8b";
+    var applicationPassword = "tTh8hNEuKRTCt3k67T5ZqjS";
+
+    var postBody = $"client_id={applicationId}&redirect_uri={redirectUri}&client_secret={applicationPassword}&grant_type=refresh_token&refresh_token={state.RefreshToken}";
+
+    var request = new HttpRequestMessage(new HttpMethod("POST"), tokenServiceUri);
+    request.Content = new StringContent(postBody, System.Text.Encoding.UTF8, "application/x-www-form-urlencoded");
+
+    using (var client = new HttpClient())
+    {
+        var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+
+        dynamic data = JsonConvert.DeserializeObject(await response.Content.ReadAsStringAsync());
+
+        state.AccessToken = data.access_token;
+        state.RefreshToken = data.refresh_token;
+
+        log.Verbose("New token acquired!");
+    }
 }
 
 public class StoredState : TableEntity
