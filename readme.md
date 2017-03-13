@@ -1,11 +1,14 @@
-# HttpTrigger - C<span>#</span>
+# OneDrive, Excel REST Azure Function Demo
 
-The `HttpTrigger` makes it incredibly easy to have your functions executed via an HTTP call to your function.
+This repo contains the source for an Azure Function that leverages Microsoft Graph, OneDrive, and Excel REST API to provide real time data updates to an Excel workbook saved in OneDrive for Business.
 
 ## How it works
 
-When you call the function, be sure you checkout which security rules you apply. If you're using an apikey, you'll need to include that in your request.
+The sample uses Webhooks to receive changes from OneDrive for Business, Microsoft Graph and OneDrive API to retrieve a set of files that have changed, and the Excel Workbook API to find requests for data inside a workbook.
+The sample then parses those requests, uses other APIs to retrieve data relevent to the request, and populates the workbook with this data.
+
+End to end, the scenario allows you to use the phrase `!roland` to request stock quotes for any stock ticker symbol without leaving Excel Web App.
 
 ## Learn more
 
-<TODO> Documentation
+**TODO Documentation**
